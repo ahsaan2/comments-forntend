@@ -53,11 +53,18 @@ const PostsPage = () => {
   const [newContent, setNewContent] = useState('');
   const [creatingPost, setCreatingPost] = useState(false);
 
+  // Fetch posts from API
   const fetchPosts = async () => {
     try {
-      const response = await fetch('http://localhost:3001/posts');
+      const response = await fetch('http://localhost:3001/posts',{
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
       if (!response.ok) throw new Error(`Error ${response.status}`);
       const data: Post[] = await response.json();
+      console.log("Fetched posts:", data);
       setPosts(data);
     } catch (err: any) {
       setError(err.message || 'Failed to load posts.');
@@ -65,10 +72,12 @@ const PostsPage = () => {
       setLoadingPosts(false);
     }
   };
-
+// Fetch comments for a specific post
   const fetchComments = async (postId: number) => {
     try {
-      const res = await fetch(`http://localhost:3001/comments/post/${postId}`);
+      const res = await fetch(`http://localhost:3001/comments/post/${postId}`,{
+        credentials: 'include',
+      });
       if (!res.ok) throw new Error(`Error ${res.status}`);
       const flatComments: Comment[] = await res.json();
       const tree = buildCommentTree(flatComments);
@@ -98,12 +107,15 @@ const PostsPage = () => {
     if (!replyContent.trim() || expandedPostId === null) return;
 
     try {
-      const res = await fetch('http://localhost:3001/comments', {
+      // Post reply to the API
+      const res = await fetch(`http://localhost:3001/comments/${expandedPostId}`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           postId: expandedPostId,
           parentId,
+          authorId: 8,
           content: replyContent.trim(),
         }),
       });
@@ -118,16 +130,19 @@ const PostsPage = () => {
   };
 
   const handleCreatePost = async () => {
-    if (!newTitle.trim() || !newContent.trim()) return;
-
+    if (!newTitle.trim() || !newContent.trim()) 
+      return;
+    alert("Creating post");
     setCreatingPost(true);
     try {
       const res = await fetch('http://localhost:3001/posts', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: newTitle.trim(),
           content: newContent.trim(),
+          authorId: 8
         }),
       });
 
@@ -136,6 +151,7 @@ const PostsPage = () => {
       setNewContent('');
       await fetchPosts(); // Refresh posts
     } catch (err) {
+      alert(err)
       console.error('Error creating post:', err);
     } finally {
       setCreatingPost(false);

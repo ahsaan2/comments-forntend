@@ -59,9 +59,44 @@ const PostsPage = () => {
   const [editPostTitle, setEditPostTitle] = useState('');
   const [editPostContent, setEditPostContent] = useState('');
 
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setUsername(localStorage.getItem('username'));
+      const storedUsername = localStorage.getItem('username');
+      setUsername(storedUsername);
+      if (!storedUsername) {
+        // Only show overlay if not on /login or /register
+        const path = window.location.pathname;
+        if (path !== '/login' && path !== '/register') {
+          localStorage.clear();
+          // Show a custom login/register UI if not logged in
+          const loginDiv = document.createElement('div');
+          loginDiv.style.position = 'fixed';
+          loginDiv.style.top = '0';
+          loginDiv.style.left = '0';
+          loginDiv.style.width = '100vw';
+          loginDiv.style.height = '100vh';
+          loginDiv.style.background = 'rgba(255,255,255,0.98)';
+          loginDiv.style.display = 'flex';
+          loginDiv.style.flexDirection = 'column';
+          loginDiv.style.justifyContent = 'center';
+          loginDiv.style.alignItems = 'center';
+          loginDiv.style.zIndex = '9999';
+          loginDiv.innerHTML = `
+            <div style="background: white; padding: 2.5rem 3.5rem; border-radius: 1.25rem; box-shadow: 0 4px 32px #0003; text-align: center; min-width: 340px; min-height: 260px;">
+              <h2 style="font-size: 2.2rem; margin-bottom: 1.5rem; color: #1e293b; font-weight: bold; letter-spacing: -1px;">Welcome!</h2>
+              <p style="margin-bottom: 2.2rem; color: #334155; font-size: 1.1rem;">Please log in or register to continue.</p>
+              <div style="display: flex; flex-direction: column; gap: 1.2rem; align-items: stretch;">
+                <a href="/login" style="background: #2563eb; color: white; padding: 1.1rem 0; border-radius: 0.6rem; text-decoration: none; font-weight: 600; font-size: 1.15rem; box-shadow: 0 2px 8px #2563eb22; transition: background 0.2s;">Login</a>
+                <a href="/register" style="background: #22c55e; color: white; padding: 1.1rem 0; border-radius: 0.6rem; text-decoration: none; font-weight: 600; font-size: 1.15rem; box-shadow: 0 2px 8px #22c55e22; transition: background 0.2s;">Register</a>
+              </div>
+            </div>
+          `;
+          document.body.appendChild(loginDiv);
+          // Prevent rendering the rest of the app
+          document.body.style.overflow = 'hidden';
+        }
+      }
     }
   }, []);
 
@@ -376,9 +411,37 @@ const PostsPage = () => {
     );
   };
 
+  // Logout handler
+  const handleLogout = () => {
+    localStorage.removeItem('username');
+    window.location.reload();
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 p-6">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">Posts</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl font-bold text-gray-800">Posts</h1>
+        <div className="flex items-center gap-4">
+          {username ? (
+            <>
+              <span className="text-lg text-gray-700">Welcome, <span className="font-semibold">{username}</span>!</span>
+              <button
+                className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm"
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <a
+              href="/login"
+              className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
+            >
+              Login
+            </a>
+          )}
+        </div>
+      </div>
 
       {loadingPosts && <p className="text-gray-600">Loading posts...</p>}
       {error && <p className="text-red-500">Error: {error}</p>}

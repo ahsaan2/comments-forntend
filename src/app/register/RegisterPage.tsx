@@ -28,6 +28,10 @@ const RegisterPage = () => {
       setUsername("");
       setEmail("");
       setPassword("");
+      // Redirect to login after short delay
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 1200);
     } catch (err: any) {
       setError(err.message || "Registration failed");
     } finally {

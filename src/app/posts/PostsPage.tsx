@@ -13,6 +13,7 @@ interface Comment {
   postId: number;
   parentId: number | null;
   content: string;
+  authorName?: string; // Add authorName for initials
   children?: Comment[];
 }
 
@@ -51,6 +52,14 @@ const PostsPage = () => {
   const [activeReplyId, setActiveReplyId] = useState<number | null>(null);
   const [replyContentMap, setReplyContentMap] = useState<{ [key: string]: string }>({});
   const [activePostReplyId, setActivePostReplyId] = useState<number | null>(null);
+  // Store username from localStorage (if logged in)
+  const [username, setUsername] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setUsername(localStorage.getItem('username'));
+    }
+  }, []);
 
   // New Post Form
   const [newTitle, setNewTitle] = useState('');
@@ -125,6 +134,7 @@ const PostsPage = () => {
           postId,
           parentId,
           authorId: 8,
+          authorName: username || 'User',
           content,
         }),
       });
@@ -173,7 +183,14 @@ const PostsPage = () => {
     <div className="ml-4 mt-4">
       <div className="flex items-start gap-3">
         <div className="w-8 h-8 flex-shrink-0 rounded-full bg-blue-100 text-blue-700 font-bold text-sm flex items-center justify-center">
-          {comment.id}
+          {comment.authorName
+            ? comment.authorName
+            : username
+              ? username
+                  .split(' ')
+                  .map((n) => n[0]?.toUpperCase())
+                  .join('')
+              : 'U'}
         </div>
         <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-200 w-full">
           <p className="text-sm text-gray-800">{comment.content}</p>
@@ -369,13 +386,13 @@ const PostsPage = () => {
         <input
           type="text"
           placeholder="Title"
-          className="w-full mb-3 p-3 border rounded text-sm"
+          className="w-full mb-3 p-3 border rounded text-base bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 shadow-sm"
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
         />
         <textarea
           placeholder="Content"
-          className="w-full mb-3 p-3 border rounded text-sm"
+          className="w-full mb-3 p-3 border rounded text-base bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 shadow-sm"
           rows={4}
           value={newContent}
           onChange={(e) => setNewContent(e.target.value)}

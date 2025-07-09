@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 
+// ...existing code...
 interface Post {
   id: number;
   title: string;
@@ -41,12 +42,15 @@ function buildCommentTree(comments: Comment[]): Comment[] {
 const PostsPage = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [expandedPostId, setExpandedPostId] = useState<number | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
+  // Comments state: { [postId]: Comment[] }
+  const [comments, setComments] = useState<{ [postId: number]: Comment[] }>({});
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [loadingComments, setLoadingComments] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Store reply content per comment id and per post id
   const [activeReplyId, setActiveReplyId] = useState<number | null>(null);
-  const [replyContent, setReplyContent] = useState<string>('');
+  const [replyContentMap, setReplyContentMap] = useState<{ [key: string]: string }>({});
+  const [activePostReplyId, setActivePostReplyId] = useState<number | null>(null);
 
   // New Post Form
   const [newTitle, setNewTitle] = useState('');
@@ -74,6 +78,8 @@ const PostsPage = () => {
   };
 // Fetch comments for a specific post
   const fetchComments = async (postId: number) => {
+    // keep the state for the comments isolated to the current post only
+    
     try {
       const res = await fetch(`http://localhost:3001/comments/post/${postId}`,{
         credentials: 'include',
@@ -81,8 +87,8 @@ const PostsPage = () => {
       if (!res.ok) throw new Error(`Error ${res.status}`);
       const flatComments: Comment[] = await res.json();
       const tree = buildCommentTree(flatComments);
-      setComments(tree);
-    } catch (err) {
+      setComments(prev => ({ ...prev, [postId]: tree }));
+        } catch (err) {
       console.error('Failed to load comments:', err);
     }
   };
@@ -103,27 +109,31 @@ const PostsPage = () => {
     setLoadingComments(false);
   };
 
-  const handleSubmitReply = async (parentId: number) => {
-    if (!replyContent.trim() || expandedPostId === null) return;
+    // State leakage issue: Sharing comments across multiple posts.
+  // parentId can be number or null
+  const handleSubmitReply = async (parentId: number | null, postId: number) => {
+    const key = parentId !== null ? `c_${parentId}` : `p_${postId}`;
+    const content = replyContentMap[key]?.trim();
+    if (!content) return;
 
     try {
-      // Post reply to the API
-      const res = await fetch(`http://localhost:3001/comments/${expandedPostId}`, {
+      const res = await fetch(`http://localhost:3001/comments`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          postId: expandedPostId,
+          postId,
           parentId,
           authorId: 8,
-          content: replyContent.trim(),
+          content,
         }),
       });
 
       if (!res.ok) throw new Error('Failed to post comment');
-      setReplyContent('');
+      setReplyContentMap(prev => ({ ...prev, [key]: '' }));
       setActiveReplyId(null);
-      await fetchComments(expandedPostId);
+      setActivePostReplyId(null);
+      await fetchComments(postId);
     } catch (err) {
       console.error('Error posting reply:', err);
     }
@@ -158,7 +168,8 @@ const PostsPage = () => {
     }
   };
 
-  const CommentNode = ({ comment }: { comment: Comment }) => (
+  // Pass postId as prop to CommentNode for correct post context
+  const CommentNode = ({ comment, postId }: { comment: Comment; postId: number }) => (
     <div className="ml-4 mt-4">
       <div className="flex items-start gap-3">
         <div className="w-8 h-8 flex-shrink-0 rounded-full bg-blue-100 text-blue-700 font-bold text-sm flex items-center justify-center">
@@ -168,9 +179,10 @@ const PostsPage = () => {
           <p className="text-sm text-gray-800">{comment.content}</p>
           <button
             className="text-xs text-blue-500 mt-2 hover:underline"
+            aria-label={`Reply to comment ${comment.id}`}
             onClick={() => {
               setActiveReplyId(comment.id);
-              setReplyContent('');
+              setActivePostReplyId(null);
             }}
           >
             Reply
@@ -179,23 +191,28 @@ const PostsPage = () => {
           {activeReplyId === comment.id && (
             <div className="mt-2">
               <textarea
-                className="w-full p-2 border rounded text-sm"
+                className="w-full p-2 border rounded text-sm bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 shadow-sm"
                 rows={2}
                 placeholder="Write a reply..."
-                value={replyContent}
-                onChange={(e) => setReplyContent(e.target.value)}
+                value={replyContentMap[`c_${comment.id}`] || ""}
+                onChange={e => {
+                  const value = e.target.value;
+                  setReplyContentMap(prev => ({ ...prev, [`c_${comment.id}`]: value }));
+                }}
               />
               <div className="flex gap-2 mt-1">
                 <button
                   className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-                  onClick={() => handleSubmitReply(comment.id)}
+                  aria-label={`Submit reply to comment ${comment.id}`}
+                  onClick={() => handleSubmitReply(comment.id, postId)}
                 >
                   Submit
                 </button>
                 <button
                   className="text-xs text-gray-500 hover:underline"
+                  aria-label="Cancel reply"
                   onClick={() => {
-                    setReplyContent('');
+                    setReplyContentMap(prev => ({ ...prev, [`c_${comment.id}`]: "" }));
                     setActiveReplyId(null);
                   }}
                 >
@@ -204,16 +221,16 @@ const PostsPage = () => {
               </div>
             </div>
           )}
+
+          {comment.children && Array.isArray(comment.children) && comment.children.length > 0 && (
+            <div className="mt-2 pl-6 border-l-2 border-gray-200">
+              {comment.children.map((child) => (
+                <CommentNode key={child.id} comment={child} postId={postId} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
-
-      {comment.children?.length > 0 && (
-        <div className="mt-2 pl-6 border-l-2 border-gray-200">
-          {comment.children.map((child) => (
-            <CommentNode key={child.id} comment={child} />
-          ))}
-        </div>
-      )}
     </div>
   );
 
@@ -241,12 +258,104 @@ const PostsPage = () => {
               <div className="mt-5 border-t pt-4">
                 {loadingComments ? (
                   <p className="text-sm text-gray-500">Loading comments...</p>
-                ) : comments.length > 0 ? (
-                  comments.map((comment) => (
-                    <CommentNode key={comment.id} comment={comment} />
-                  ))
+                ) : comments[post.id]?.length > 0 ? (
+                  <>
+                    {/* Post-level reply UI */}
+                    {activePostReplyId === post.id && (
+                      <div className="mb-4">
+                        <textarea
+                          className="w-full p-2 border rounded text-sm bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 shadow-sm"
+                          rows={2}
+                          placeholder="Write a reply to this post..."
+                          value={replyContentMap[`p_${post.id}`] || ""}
+                          onChange={e => {
+                            const value = e.target.value;
+                            setReplyContentMap(prev => ({ ...prev, [`p_${post.id}`]: value }));
+                          }}
+                        />
+                        <div className="flex gap-2 mt-1">
+                          <button
+                            className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                            aria-label={`Submit reply to post ${post.id}`}
+                            onClick={() => handleSubmitReply(null, post.id)}
+                          >
+                            Submit
+                          </button>
+                          <button
+                            className="text-xs text-gray-500 hover:underline"
+                            aria-label="Cancel post reply"
+                            onClick={() => {
+                              setReplyContentMap(prev => ({ ...prev, [`p_${post.id}`]: "" }));
+                              setActivePostReplyId(null);
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      className="mb-2 text-xs text-blue-600 hover:underline"
+                      aria-label={`Reply to post ${post.id}`}
+                      onClick={() => {
+                        setActivePostReplyId(post.id);
+                        setActiveReplyId(null);
+                      }}
+                    >
+                      Reply to Post
+                    </button>
+                    {comments[post.id].map((comment) => (
+                      <CommentNode key={comment.id} comment={comment} postId={post.id} />
+                    ))}
+                  </>
                 ) : (
-                  <p className="text-sm text-gray-500">No comments found.</p>
+                  <>
+                    {/* Post-level reply UI even if no comments */}
+                    {activePostReplyId === post.id && (
+                      <div className="mb-4">
+                        <textarea
+                          className="w-full p-2 border rounded text-sm bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 shadow-sm"
+                          rows={2}
+                          placeholder="Write a reply to this post..."
+                          value={replyContentMap[`p_${post.id}`] || ""}
+                          onChange={e => {
+                            const value = e.target.value;
+                            setReplyContentMap(prev => ({ ...prev, [`p_${post.id}`]: value }));
+                          }}
+                        />
+                        <div className="flex gap-2 mt-1">
+                          <button
+                            className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                            aria-label={`Submit reply to post ${post.id}`}
+                            onClick={() => handleSubmitReply(null, post.id)}
+                          >
+                            Submit
+                          </button>
+                          <button
+                            className="text-xs text-gray-500 hover:underline"
+                            aria-label="Cancel post reply"
+                            onClick={() => {
+                              setReplyContentMap(prev => ({ ...prev, [`p_${post.id}`]: "" }));
+                              setActivePostReplyId(null);
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      className="mb-2 text-xs text-blue-600 hover:underline"
+                      aria-label={`Reply to post ${post.id}`}
+                      onClick={() => {
+                        setActivePostReplyId(post.id);
+                        setActiveReplyId(null);
+                      }}
+                    >
+                      Reply to Post
+                    </button>
+                    <p className="text-sm text-gray-500">No comments found.</p>
+                  </>
                 )}
               </div>
             )}
